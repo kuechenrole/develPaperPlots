@@ -1,0 +1,268 @@
+# This file is part of pyfesom
+#
+################################################################################
+#
+# Original code by Nikolay Koldunov, 2018
+#
+#
+################################################################################
+import pdb
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib import cm
+try:
+    import cartopy.crs as ccrs
+    import cartopy.feature as cfeature
+except:
+    print('cartopy is not avalible, plotting will not work')
+try:
+    from cmocean import cm as cmo
+except:
+    print('no cmocean')
+import matplotlib as mpl
+from .transect import *
+import math
+
+
+def plot_transect_map(lon_start, lat_start, lon_end, lat_end, 
+                      mesh, npoints=30, view = 'w', stock_img=False):
+    # plt.figure(figsize=(10,10))
+    lonlat = transect_get_lonlat(lon_start, lat_start, lon_end, lat_end, npoints=npoints)
+    nodes  = transect_get_nodes(lonlat, mesh)
+    dist   = transect_get_distance(lonlat)
+
+    if view=='w':
+        ax = plt.subplot(111, projection=ccrs.Mercator(central_longitude=0))
+        ax.set_extent([180, -180, -80, 90], crs=ccrs.PlateCarree())
+    elif view=='np':
+        ax = plt.subplot(111, projection=ccrs.NorthPolarStereo(central_longitude=0))
+        ax.set_extent([180, -180, 60, 90], crs=ccrs.PlateCarree())
+    elif view=='sp':
+        ax = plt.subplot(111, projection=ccrs.SouthPolarStereo(central_longitude=0))
+        ax.set_extent([180, -180, -90, -50], crs=ccrs.PlateCarree())
+    else:
+        raise ValueError('The "{}" is not recognized as valid view option.'.format(view))
+    
+    
+    ax.scatter(lonlat[:,0], lonlat[:,1], s=30, c='b',  transform=ccrs.PlateCarree())
+    ax.scatter(mesh.x2[nodes], mesh.y2[nodes], s=30, c='r',  transform=ccrs.PlateCarree())
+    if stock_img==True:
+        ax.stock_img()
+    ax.coastlines(resolution='50m')
+    return ax
+
+def plot_transect(data3d, mesh, lon_start,
+                  lat_start,
+                  lon_end,
+                  lat_end,
+                  npoints=30,
+                  maxdepth = 1000,
+                  label = '$^{\circ}$C',
+                  title = '',
+                  levels=None,
+                  cmap = cm.Spectral_r,
+                  ax = None, 
+                  dist = None,
+                  profile = None, 
+                  ncols = 2,
+                  figsize = None, 
+                  transect_data = [],
+                  max_distance = 1e6 ):
+
+        
+    depth_index=(abs(mesh.zlevs-maxdepth)).argmin()+1
+    if not isinstance(data3d, list):
+        if ax is None:
+            ax = plt.gca()
+            oneplot = True
+        else:
+            oneplot = False
+        if ((type(dist) is np.ndarray) and (type(profile) is np.ndarray)):
+            if not (type(transect_data) is np.ma.core.MaskedArray):
+                mask2d = transect_get_mask(nodes, mesh, lonlat, profile, max_distance)
+                transect_data = transect_get_data(data3d, profile, nodes, mesh, mask2d)
+        elif ((type(dist) is np.ndarray) and (type(transect_data) is np.ndarray)):
+            lonlat = transect_get_lonlat(lon_start, lat_start, lon_end, lat_end, npoints=npoints)
+        else:
+            lonlat = transect_get_lonlat(lon_start, lat_start, lon_end, lat_end, npoints=npoints)
+            nodes  = transect_get_nodes(lonlat, mesh)
+            dist   = transect_get_distance(lonlat)
+            profile = transect_get_profile(nodes, mesh)
+           # pdb.set_trace()
+            if not (type(transect_data) is np.ma.core.MaskedArray):
+                mask2d = transect_get_mask(nodes, mesh, lonlat, profile, max_distance)
+                transect_data = transect_get_data(data3d, profile, nodes, mesh, mask2d)
+       # return nodes,profile,transect_data
+       # pdb.set_trace()
+        image = ax.contourf( dist, mesh.zlevs[:depth_index], transect_data[:,:depth_index].T,
+                            levels = levels, cmap = cmap, extend='both')
+        ax.invert_yaxis()
+        ax.set_title(title)
+        ax.set_xlabel('km')
+        ax.set_ylabel('m')
+
+        if oneplot:
+            cb = plt.colorbar(image)
+            cb.set_label(label)
+
+
+        return image
+    else:
+            ncols = float(ncols)
+            nplots = len(data3d)
+            nrows = math.ceil(nplots/ncols)
+            ncols = int(ncols)
+            nrows = int(nrows)
+            nplot = 1
+
+            if not figsize:
+                figsize = (8*ncols,2*nrows*ncols)
+            fig, ax = plt.subplots(nrows,ncols, figsize=figsize)
+            ax = ax.flatten()
+            for ind, data in enumerate(data3d):
+                if ((type(dist) is np.ndarray) and (type(profile) is np.ndarray)):
+                    transect_data = transect_get_data(data, profile)
+                else:
+                    lonlat = transect_get_lonlat(lon_start, lat_start, lon_end, lat_end, npoints=npoints)
+                    nodes  = transect_get_nodes(lonlat, mesh)
+                    dist   = transect_get_distance(lonlat)
+                    profile = transect_get_profile(nodes, mesh)
+                    mask2d = transect_get_mask(nodes, mesh, lonlat, profile, max_distance)
+                    transect_data = transect_get_data(data3d, profile, max_distance)
+
+                image = ax[ind].contourf( dist, mesh.zlevs[:depth_index], transect_data[:,:depth_index].T,
+                                    levels = levels, cmap = cmap, extend='both')
+                ax[ind].invert_yaxis()
+                if not isinstance(title, list):
+                    ax[ind].set_title(title)
+                else:
+                    ax[ind].set_title(title[ind])
+                ax[ind].set_xlabel('km')
+                ax[ind].set_ylabel('m')
+                
+                cb = fig.colorbar(image, orientation='horizontal', ax=ax[ind], pad=0.11)
+                cb.set_label(label)
+            for delind in range(ind+1, len(ax)):
+                
+                fig.delaxes(ax[delind])
+
+            fig.tight_layout()
+            
+                
+def plot_transect_sigma(data3d, mesh, lon_start,
+                  lat_start,
+                  lon_end,
+                  lat_end,
+                  npoints=30,
+                  maxdepth = 1000,
+                  label = '$^{\circ}$C',
+                  title = '',
+                  levels=None,
+                  cmap = cm.Spectral_r,
+                  ax = None, 
+                  dist = None,
+                  profile = None, 
+                  ncols = 2,
+                  figsize = None, 
+                  transect_data = [],
+                  max_distance = 1e6 ):
+
+        
+    depth_index=(abs(mesh.zlevs-maxdepth)).argmin()+1
+    #print('Hallo')
+    if not isinstance(data3d, list):
+        if ax is None:
+            ax = plt.gca()
+            oneplot = True
+        else:
+            oneplot = False
+        if ((type(dist) is np.ndarray) and (type(profile) is np.ndarray)):
+            if not (type(transect_data) is np.ma.core.MaskedArray):
+                mask2d = transect_get_mask(nodes, mesh, lonlat, profile, max_distance)
+                transect_data = transect_get_data(data3d, profile, nodes, mesh, mask2d)
+        elif ((type(dist) is np.ndarray) and (type(transect_data) is np.ndarray)):
+            lonlat = transect_get_lonlat(lon_start, lat_start, lon_end, lat_end, npoints=npoints)
+        else:
+            lonlat = transect_get_lonlat(lon_start, lat_start, lon_end, lat_end, npoints=npoints)
+            nodes  = transect_get_nodes(lonlat, mesh)
+            dist   = transect_get_distance(lonlat)
+            profile = transect_get_profile(nodes, mesh)
+        #return nodes,profile,dist
+            if not (type(transect_data) is np.ma.core.MaskedArray):
+                mask2d = transect_get_mask(nodes, mesh, lonlat, profile, max_distance)
+                transect_data = transect_get_data(data3d, profile, nodes, mesh, mask2d)
+
+        x1d = mesh.x2[np.unique(nodes)]
+        sort1d = np.argsort(x1d)
+        x1d = x1d[sort1d]
+        nodes32 = mesh.n32[np.unique(nodes)[sort1d]]
+        x2d = np.transpose(np.tile(x1d,(37,1)))
+        z2d = np.reshape(mesh.zcoord[nodes32.flatten()-1],x2d.shape)
+        data2d = np.reshape(data3d[nodes32.flatten()-1],x2d.shape)
+        #return x2d,z2d,data2d
+
+        image = ax.contourf(x2d*111, z2d, data2d,
+                            levels = levels, cmap = cmap, extend='both')
+        ax.invert_yaxis()
+        ax.set_title(title)
+        ax.set_xlabel('km')
+        ax.set_ylabel('m')
+
+        if oneplot:
+            cb = plt.colorbar(image)
+            cb.set_label(label)
+
+
+        return image
+
+    else:
+            ncols = float(ncols)
+            nplots = len(data3d)
+            nrows = math.ceil(nplots/ncols)
+            ncols = int(ncols)
+            nrows = int(nrows)
+            nplot = 1
+
+            if not figsize:
+                figsize = (8*ncols,2*nrows*ncols)
+            fig, ax = plt.subplots(nrows,ncols, figsize=figsize)
+            ax = ax.flatten()
+            for ind, data in enumerate(data3d):
+                if ((type(dist) is np.ndarray) and (type(profile) is np.ndarray)):
+                    transect_data = transect_get_data(data, profile)
+                else:
+                    lonlat = transect_get_lonlat(lon_start, lat_start, lon_end, lat_end, npoints=npoints)
+                    nodes  = transect_get_nodes(lonlat, mesh)
+                    dist   = transect_get_distance(lonlat)
+                    profile = transect_get_profile(nodes, mesh)
+                    mask2d = transect_get_mask(nodes, mesh, lonlat, profile, max_distance)
+                    transect_data = transect_get_data(data3d, profile, max_distance)
+
+                x1d = mesh.x2[np.unique(nodes)]
+                sort1d = np.argsort(x1d)
+                x1d = x1d[sort1d]
+                nodes32 = mesh.n32[np.unique(nodes)[sort1d]]
+                x2d = np.transpose(np.tile(x1d,(37,1)))
+                z2d = np.reshape(mesh.zcoord[nodes32.flatten()-1],x2d.shape)
+                data2d = np.reshape(data3d[nodes32.flatten()-1],x2d.shape)
+
+                image = ax[ind].contourf(x2d*111, z2d, data2d,
+                            levels = levels, cmap = cmap, extend='both')
+
+                ax[ind].invert_yaxis()
+                if not isinstance(title, list):
+                    ax[ind].set_title(title)
+                else:
+                    ax[ind].set_title(title[ind])
+                ax[ind].set_xlabel('km')
+                ax[ind].set_ylabel('m')
+
+                cb = fig.colorbar(image, orientation='horizontal', ax=ax[ind], pad=0.11)
+                cb.set_label(label)
+            for delind in range(ind+1, len(ax)):
+
+                fig.delaxes(ax[delind])
+
+            fig.tight_layout()
+
+
