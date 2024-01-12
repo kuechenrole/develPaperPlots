@@ -1,0 +1,13 @@
+How I produced the AWICM anomaly forcing for e.g. oo0025
+
+1. AWI CM data path on hlrn: /scratch/usr/hbkncara/input/forcing/ssp370/
+
+2. Use nco and cdo commands that produce ssp370_2090-2099_historical_1990-1999_diff.nc (the difference between the mean 1990-2000 and the mean 2090-2100); the commands are in the history of the netcdf file; the file is in this folder and also here: /isibhv/netscratch/orichter/AWICM/ssp370_2090-2099_historical_1990-1999_diff.nc
+
+3. AWICM2ERAInterim.ipynb to apply the anomaly on the Era-Interim forcing and produce the data in the folder eraint_years_manip (/scratch/projects/hbk00097/forcing/eraint_years_manip) 
+
+4. AWICMforcingCheck.ipynb to sanity check the fesom output (oo0025.forcing.diag.nc) 
+
+
+
+

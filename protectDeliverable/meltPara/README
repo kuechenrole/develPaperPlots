@@ -1,0 +1,5 @@
+How I applied the melt parameterisation
+
+1. calibration and sanity checking and plotting done in meltParameterisationGammaT.ipynb
+
+2. application in ua done in DefineMassbalance.m 
